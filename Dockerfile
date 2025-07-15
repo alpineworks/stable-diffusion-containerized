@@ -1,51 +1,66 @@
-# syntax=docker/dockerfile:1
-FROM nvidia/cuda:11.7.1-runtime-ubuntu20.04
+FROM alpine/git:2.36.2 as download
 
-ENV PATH="/root/miniconda3/bin:${PATH}"
-ARG PATH="/root/miniconda3/bin:${PATH}"
-RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && \
-    apt-get install -y wget fonts-dejavu-core rsync git libglib2.0-0 libglib2.0-dev && \
-    apt-get clean
+COPY clone.sh /clone.sh
 
-ARG TARGETARCH
-RUN case ${TARGETARCH} in \
-    "amd64") MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" ;; \
-    "arm64") MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh" ;; \
-    *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
-    esac \
-    && wget ${MINICONDA_URL} -O miniconda.sh \
-    && mkdir /root/.conda \
-    && bash miniconda.sh -b -p /root/miniconda3 \
-    && rm -f miniconda.sh
+RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets.git 6f7db241d2f8ba7457bac5ca9753331f0c266917
 
-RUN conda install python=3.8.5 && conda clean -a -y
-RUN conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=11.3 -c pytorch && conda clean -a -y
-RUN git clone https://github.com/hlky/stable-diffusion.git && cd stable-diffusion && git reset --hard ff8c2d0b709f1e4180fb19fa5c27ec28c414cedd
-RUN conda env update --file stable-diffusion/environment.yaml --name base && conda clean -a -y
-RUN cd stable-diffusion && git pull && git reset --hard c5b2c86f1479dec75b0e92dd37f9357a68594bda && \
-    conda env update --file environment.yaml --name base && conda clean -a -y
+RUN . /clone.sh stable-diffusion-stability-ai https://github.com/Stability-AI/stablediffusion.git cf1d67a6fd5ea1aa600c4df58e5b47da45f6bdbf \
+    && rm -rf assets data/**/*.png data/**/*.jpg data/**/*.gif
 
-# Textual-inversion:
-RUN <<EOF
-git clone https://github.com/hlky/sd-enable-textual-inversion.git &&
-cd /sd-enable-textual-inversion && git reset --hard 08f9b5046552d17cf7327b30a98410222741b070 &&
-rsync -a /sd-enable-textual-inversion/ /stable-diffusion/
-EOF
+RUN . /clone.sh BLIP https://github.com/salesforce/BLIP.git 48211a1594f1321b00f14c9f7a5b4813144b2fb9
+RUN . /clone.sh k-diffusion https://github.com/crowsonkb/k-diffusion.git ab527a9a6d347f364e3d185ba6d714e22d80cb3c
+RUN . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interrogator 2cf03aaf6e704197fd0dae7c7f96aa59cf1b11c9
+RUN . /clone.sh generative-models https://github.com/Stability-AI/generative-models 45c443b316737a4ab6e40413d7794a7f5657c19f
+RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets 6f7db241d2f8ba7457bac5ca9753331f0c266917
 
-WORKDIR /stable-diffusion
-ENV TRANSFORMERS_CACHE=/cache/transformers TORCH_HOME=/cache/torch CLI_ARGS="" \
-    GFPGAN_PATH=/stable-diffusion/src/gfpgan/experiments/pretrained_models/GFPGANv1.3.pth \
-    RealESRGAN_PATH=/stable-diffusion/src/realesrgan/experiments/pretrained_models/RealESRGAN_x4plus.pth \
-    RealESRGAN_ANIME_PATH=/stable-diffusion/src/realesrgan/experiments/pretrained_models/RealESRGAN_x4plus_anime_6B.pth
+
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive PIP_PREFER_BINARY=1
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt-get update && \
+    # we need those
+    apt-get install -y fonts-dejavu-core rsync git jq moreutils aria2 \
+    # extensions needs those
+    ffmpeg libglfw3-dev libgles2-mesa-dev pkg-config libcairo2 libcairo2-dev build-essential
+
+
+WORKDIR /
+RUN --mount=type=cache,target=/root/.cache/pip \
+    git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git && \
+    cd stable-diffusion-webui && \
+    git reset --hard v1.9.4 && \
+    pip install -r requirements_versions.txt
+
+
+ENV ROOT=/stable-diffusion-webui
+
+COPY --from=download /repositories/ ${ROOT}/repositories/
+RUN mkdir ${ROOT}/interrogate && cp ${ROOT}/repositories/clip-interrogator/clip_interrogator/data/* ${ROOT}/interrogate
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install pyngrok xformers==0.0.26.post1 \
+    git+https://github.com/TencentARC/GFPGAN.git@8d2447a2d918f8eba5a4a01463fd48e45126a379 \
+    git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1 \
+    git+https://github.com/mlfoundations/open_clip.git@v2.20.0
+
+# there seems to be a memory leak (or maybe just memory not being freed fast enough) that is fixed by this version of malloc
+# maybe move this up to the dependencies list.
+RUN apt-get -y install libgoogle-perftools-dev && apt-get clean
+ENV LD_PRELOAD=libtcmalloc.so
+
+COPY . /docker
+
+RUN \
+    # mv ${ROOT}/style.css ${ROOT}/user.css && \
+    # one of the ugliest hacks I ever wrote \
+    sed -i 's/in_app_dir = .*/in_app_dir = True/g' /opt/conda/lib/python3.10/site-packages/gradio/routes.py && \
+    git config --global --add safe.directory '*'
+
+WORKDIR ${ROOT}
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV CLI_ARGS=""
 EXPOSE 7860
-CMD \
-    for path in "${GFPGAN_PATH}" "${RealESRGAN_PATH}" "${RealESRGAN_ANIME_PATH}"; do \
-    name=$(basename "${path}"); \
-    base=$(dirname "${path}"); \
-    test -f "/models/${name}" && mkdir -p "${base}" && ln -sf "/models/${name}" "${path}" && echo "Mounted ${name}";\
-    done;\
-    # force facexlib cache
-    mkdir -p /cache/weights/ && rm -rf /stable-diffusion/src/facexlib/facexlib/weights && \
-    ln -sf  /cache/weights/ /stable-diffusion/src/facexlib/facexlib/ && \
-    # run, -u to not buffer stdout / stderr
-    python3 -u scripts/webui.py --outdir /output --ckpt /models/model.ckpt --save-metadata ${CLI_ARGS}
+ENTRYPOINT ["/docker/entrypoint.sh"]
+CMD python -u webui.py --listen --port 7860 ${CLI_ARGS}
