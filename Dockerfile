@@ -12,7 +12,6 @@ RUN . /clone.sh k-diffusion https://github.com/crowsonkb/k-diffusion.git ab527a9
 RUN . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interrogator 2cf03aaf6e704197fd0dae7c7f96aa59cf1b11c9
 RUN . /clone.sh generative-models https://github.com/Stability-AI/generative-models 45c443b316737a4ab6e40413d7794a7f5657c19f
 RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets 6f7db241d2f8ba7457bac5ca9753331f0c266917
-RUN . /clone.sh openai https://huggingface.co/openai/clip-vit-large-patch14 32bd64288804d66eefd0ccbe215aa642df71cc41
 
 
 FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
@@ -32,6 +31,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git && \
     cd stable-diffusion-webui && \
     git reset --hard v1.9.4 && \
+    mkdir -p openai && \
+    cd openai && \
+    git init && \
+    git remote add origin https://huggingface.co/openai/clip-vit-large-patch14 && \
+    git fetch origin 32bd64288804d66eefd0ccbe215aa642df71cc41 --depth=1 && \
+    git reset --hard 32bd64288804d66eefd0ccbe215aa642df71cc41 && \
+    rm -rf .git && \
+    cd .. && \
     pip install -r requirements_versions.txt && \
     pip install --upgrade "typing_extensions>=4.6.0"
 
