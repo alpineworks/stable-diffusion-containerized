@@ -7,11 +7,16 @@ RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && \
     apt-get install -y wget fonts-dejavu-core rsync git libglib2.0-0 libglib2.0-dev && \
     apt-get clean
 
-RUN wget \
-    https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+ARG TARGETARCH
+RUN case ${TARGETARCH} in \
+    "amd64") MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" ;; \
+    "arm64") MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh" ;; \
+    *) echo "Unsupported architecture: ${TARGETARCH}" && exit 1 ;; \
+    esac \
+    && wget ${MINICONDA_URL} -O miniconda.sh \
     && mkdir /root/.conda \
-    && bash Miniconda3-latest-Linux-x86_64.sh -b -p /root/miniconda3 \
-    && rm -f Miniconda3-latest-Linux-x86_64.sh
+    && bash miniconda.sh -b -p /root/miniconda3 \
+    && rm -f miniconda.sh
 
 RUN conda install python=3.9 && conda clean -a -y
 RUN conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=11.3 -c pytorch && conda clean -a -y
