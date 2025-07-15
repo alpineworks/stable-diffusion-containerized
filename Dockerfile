@@ -33,12 +33,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     git reset --hard v1.9.4 && \
     mkdir -p openai && \
     cd openai && \
-    git init && \
-    git remote add origin https://huggingface.co/openai/clip-vit-large-patch14 && \
-    git fetch origin 32bd64288804d66eefd0ccbe215aa642df71cc41 --depth=1 && \
+    git clone https://huggingface.co/openai/clip-vit-large-patch14 && \
+    cd clip-vit-large-patch14 && \
     git reset --hard 32bd64288804d66eefd0ccbe215aa642df71cc41 && \
     rm -rf .git && \
-    cd .. && \
+    cd ../.. && \
     pip install -r requirements_versions.txt && \
     pip install --upgrade "typing_extensions>=4.6.0"
 
