@@ -10,7 +10,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && \
 RUN wget \
     https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
     && mkdir /root/.conda \
-    && bash Miniconda3-latest-Linux-x86_64.sh -b \
+    && bash Miniconda3-latest-Linux-x86_64.sh -b -p /root/miniconda3 \
     && rm -f Miniconda3-latest-Linux-x86_64.sh
 
 RUN conda install python=3.9 && conda clean -a -y
