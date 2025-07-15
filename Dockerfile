@@ -18,7 +18,7 @@ RUN case ${TARGETARCH} in \
     && bash miniconda.sh -b -p /root/miniconda3 \
     && rm -f miniconda.sh
 
-RUN conda install python=3.9 && conda clean -a -y
+RUN conda install python=3.8.5 && conda clean -a -y
 RUN conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=11.3 -c pytorch && conda clean -a -y
 RUN git clone https://github.com/hlky/stable-diffusion.git && cd stable-diffusion && git reset --hard ff8c2d0b709f1e4180fb19fa5c27ec28c414cedd
 RUN conda env update --file stable-diffusion/environment.yaml --name base && conda clean -a -y
