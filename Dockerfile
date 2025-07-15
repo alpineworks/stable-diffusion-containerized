@@ -61,7 +61,7 @@ COPY . /docker
 RUN \
     # mv ${ROOT}/style.css ${ROOT}/user.css && \
     # one of the ugliest hacks I ever wrote \
-    sed -i 's/in_app_dir = .*/in_app_dir = True/g' /opt/conda/lib/python3.10/site-packages/gradio/routes.py && \
+    find /opt/conda /usr/local -name "gradio" -type d 2>/dev/null | head -1 | xargs -I {} find {} -name "routes.py" -exec sed -i 's/in_app_dir = .*/in_app_dir = True/g' {} \; && \
     git config --global --add safe.directory '*'
 
 WORKDIR ${ROOT}
