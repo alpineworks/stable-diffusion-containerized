@@ -13,7 +13,7 @@ RUN . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interr
 RUN . /clone.sh generative-models https://github.com/Stability-AI/generative-models 45c443b316737a4ab6e40413d7794a7f5657c19f
 RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets 6f7db241d2f8ba7457bac5ca9753331f0c266917
 
-FROM pytorch/pytorch:2.7.1-cuda12.6-cudnn9-runtime
+FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive PIP_PREFER_BINARY=1
 
@@ -22,7 +22,13 @@ RUN --mount=type=cache,target=/var/cache/apt \
     # we need those
     apt-get install -y fonts-dejavu-core rsync git jq moreutils aria2 \
     # extensions needs those
-    ffmpeg libglfw3-dev libgles2-mesa-dev pkg-config libcairo2 libcairo2-dev build-essential
+    ffmpeg libglfw3-dev libgles2-mesa-dev pkg-config libcairo2 libcairo2-dev build-essential \
+    # python and pip
+    python3 python3-pip python3-dev
+
+# Install PyTorch with CUDA 12.8 support (includes sm_120)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 
 WORKDIR /
@@ -36,8 +42,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     git reset --hard 32bd64288804d66eefd0ccbe215aa642df71cc41 && \
     rm -rf .git && \
     cd ../.. && \
-    pip install -r requirements_versions.txt && \
-    pip install --upgrade "typing_extensions>=4.6.0"
+    pip3 install -r requirements_versions.txt && \
+    pip3 install --upgrade "typing_extensions>=4.6.0"
 
 
 ENV ROOT=/stable-diffusion-webui
@@ -46,7 +52,7 @@ COPY --from=download /repositories/ ${ROOT}/repositories/
 RUN mkdir ${ROOT}/interrogate && cp ${ROOT}/repositories/clip-interrogator/clip_interrogator/data/* ${ROOT}/interrogate
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install pyngrok xformers==0.0.28.post2 \
+    pip3 install pyngrok xformers==0.0.28.post2 \
     git+https://github.com/TencentARC/GFPGAN.git@8d2447a2d918f8eba5a4a01463fd48e45126a379 \
     git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1 \
     git+https://github.com/mlfoundations/open_clip.git@v2.20.0
