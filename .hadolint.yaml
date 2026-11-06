@@ -1,0 +1,4 @@
+---
+ignored:
+  # pip versions: torch is pinned by ARG and ComfyUI's requirements by its tag.
+  - DL3013
