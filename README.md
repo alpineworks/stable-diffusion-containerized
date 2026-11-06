@@ -18,12 +18,16 @@ replaced it with ComfyUI.
 
 ## Running
 
+> **ComfyUI has no authentication.** Anyone who can reach port 8188 can run
+> workflows and read or write files under `/data`. Publish it on loopback only,
+> as below, or put it behind an authenticating reverse proxy.
+
 Everything ComfyUI writes goes under `/data`: `models`, `custom_nodes`,
 `input`, `output`, `temp` and `user`. `HOME` is `/tmp`, for library caches.
 Both paths need to be writable, and the root filesystem can be read-only.
 
 ```sh
-docker run --rm --gpus all -p 8188:8188 \
+docker run --rm --gpus all -p 127.0.0.1:8188:8188 \
   --read-only --tmpfs /tmp \
   -v comfyui-data:/data \
   ghcr.io/alpineworks/stable-diffusion-containerized:v2.0.0

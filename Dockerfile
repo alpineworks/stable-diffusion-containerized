@@ -5,12 +5,15 @@
 # application read-only under /opt/ComfyUI. Everything ComfyUI writes (models,
 # custom_nodes, input, output, temp, user) lives under --base-directory /data,
 # and HOME points at /tmp for library caches.
-FROM python:3.13-slim-trixie
+FROM python:3.13-slim-trixie@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # renovate: datasource=github-releases depName=comfyanonymous/ComfyUI
 ARG COMFYUI_VERSION=v0.44.0
+# sha256 of the release tarball below. Update it with COMFYUI_VERSION:
+#   curl -sL https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/<tag>.tar.gz | shasum -a 256
+ARG COMFYUI_SHA256=7d796d74f42fe862eb55d1c217349fee92c2cac5d4ababe06c8b73f90c936dc0
 ARG TORCH_VERSION=2.14.1
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 
@@ -21,7 +24,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_ROOT_USER_ACTION=ignore \
     HOME=/tmp
 
-ADD https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/${COMFYUI_VERSION}.tar.gz /tmp/comfyui.tar.gz
+ADD --checksum=sha256:${COMFYUI_SHA256} https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/${COMFYUI_VERSION}.tar.gz /tmp/comfyui.tar.gz
 
 # Install torch from the CUDA index first, then pin what it resolved so the
 # ComfyUI requirements cannot swap it for a different build from PyPI.
