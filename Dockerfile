@@ -24,6 +24,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_ROOT_USER_ACTION=ignore \
     HOME=/tmp
 
+# Torch 2.14 routes some ops through Triton kernels, and Triton compiles a
+# small C helper (driver.c) on first GPU use, so a C compiler must be present.
+# Without it, text encoding fails with "Failed to find C compiler". CPU-only
+# runs never hit this path, which is why the CI boot test also checks for cc.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 ADD --checksum=sha256:${COMFYUI_SHA256} https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/${COMFYUI_VERSION}.tar.gz /tmp/comfyui.tar.gz
 
 # Install torch from the CUDA index first, then pin what it resolved so the
