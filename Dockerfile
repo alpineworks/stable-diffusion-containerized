@@ -1,78 +1,52 @@
-FROM alpine/git:2.36.2 as download
+# syntax=docker/dockerfile:1
+#
+# ComfyUI on CUDA 13 (PyTorch cu130 wheels, which bundle the CUDA runtime; the
+# host only needs the NVIDIA driver, 580+). Runs as a non-root user with the
+# application read-only under /opt/ComfyUI. Everything ComfyUI writes (models,
+# custom_nodes, input, output, temp, user) lives under --base-directory /data,
+# and HOME points at /tmp for library caches.
+FROM python:3.13-slim-trixie@sha256:09a17cad02668ae61ece136b4fd36ac3849e14f670ebedb637ea3e15580525bc
 
-COPY clone.sh /clone.sh
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets.git 6f7db241d2f8ba7457bac5ca9753331f0c266917
+# renovate: datasource=github-releases depName=comfyanonymous/ComfyUI
+ARG COMFYUI_VERSION=v0.44.0
+# sha256 of the release tarball below. Update it with COMFYUI_VERSION:
+#   curl -sL https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/<tag>.tar.gz | shasum -a 256
+ARG COMFYUI_SHA256=7d796d74f42fe862eb55d1c217349fee92c2cac5d4ababe06c8b73f90c936dc0
+ARG TORCH_VERSION=2.14.1
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 
-RUN . /clone.sh stable-diffusion-stability-ai https://github.com/Stability-AI/stablediffusion.git cf1d67a6fd5ea1aa600c4df58e5b47da45f6bdbf \
-    && rm -rf assets data/**/*.png data/**/*.jpg data/**/*.gif
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    HOME=/tmp
 
-RUN . /clone.sh BLIP https://github.com/salesforce/BLIP.git 48211a1594f1321b00f14c9f7a5b4813144b2fb9
-RUN . /clone.sh k-diffusion https://github.com/crowsonkb/k-diffusion.git ab527a9a6d347f364e3d185ba6d714e22d80cb3c
-RUN . /clone.sh clip-interrogator https://github.com/pharmapsychotic/clip-interrogator 2cf03aaf6e704197fd0dae7c7f96aa59cf1b11c9
-RUN . /clone.sh generative-models https://github.com/Stability-AI/generative-models 45c443b316737a4ab6e40413d7794a7f5657c19f
-RUN . /clone.sh stable-diffusion-webui-assets https://github.com/AUTOMATIC1111/stable-diffusion-webui-assets 6f7db241d2f8ba7457bac5ca9753331f0c266917
+ADD --checksum=sha256:${COMFYUI_SHA256} https://github.com/comfyanonymous/ComfyUI/archive/refs/tags/${COMFYUI_VERSION}.tar.gz /tmp/comfyui.tar.gz
 
-FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04 AS base
+# Install torch from the CUDA index first, then pin what it resolved so the
+# ComfyUI requirements cannot swap it for a different build from PyPI.
+RUN mkdir -p /opt/ComfyUI \
+    && tar -xzf /tmp/comfyui.tar.gz -C /opt/ComfyUI --strip-components=1 \
+    && rm /tmp/comfyui.tar.gz \
+    && pip install --index-url "${TORCH_INDEX_URL}" "torch==${TORCH_VERSION}" torchvision \
+    && pip freeze | grep -E '^(torch|torchvision)==' > /tmp/torch-constraints.txt \
+    && pip install -c /tmp/torch-constraints.txt -r /opt/ComfyUI/requirements.txt \
+    && rm /tmp/torch-constraints.txt \
+    && python -m compileall -q /opt/ComfyUI \
+    && useradd --uid 1000 --user-group --no-create-home --home-dir /tmp comfy \
+    && mkdir -p /data \
+    && chown comfy:comfy /data
 
-ENV DEBIAN_FRONTEND=noninteractive PIP_PREFER_BINARY=1
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/comfyui-entrypoint
 
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && \
-    # we need those
-    apt-get install -y fonts-dejavu-core rsync git jq moreutils aria2 \
-    # extensions needs those
-    ffmpeg libglfw3-dev libgles2-mesa-dev pkg-config libcairo2 libcairo2-dev build-essential \
-    # python and pip
-    python3 python3-pip python3-dev
+ENV COMFYUI_DATA=/data
+WORKDIR /opt/ComfyUI
+USER 1000:1000
+EXPOSE 8188
+VOLUME ["/data"]
 
-# Install PyTorch with CUDA 12.8 support (includes sm_120)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-
-
-WORKDIR /
-RUN --mount=type=cache,target=/root/.cache/pip \
-    git clone --branch dev https://github.com/AUTOMATIC1111/stable-diffusion-webui.git && \
-    cd stable-diffusion-webui && \
-    mkdir -p openai && \
-    cd openai && \
-    git clone https://huggingface.co/openai/clip-vit-large-patch14 && \
-    cd clip-vit-large-patch14 && \
-    git reset --hard 32bd64288804d66eefd0ccbe215aa642df71cc41 && \
-    rm -rf .git && \
-    cd ../.. && \
-    pip3 install -r requirements_versions.txt && \
-    pip3 install --upgrade "typing_extensions>=4.6.0"
-
-
-ENV ROOT=/stable-diffusion-webui
-
-COPY --from=download /repositories/ ${ROOT}/repositories/
-RUN mkdir ${ROOT}/interrogate && cp ${ROOT}/repositories/clip-interrogator/clip_interrogator/data/* ${ROOT}/interrogate
-
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install pyngrok xformers==0.0.31 \
-    git+https://github.com/TencentARC/GFPGAN.git@8d2447a2d918f8eba5a4a01463fd48e45126a379 \
-    git+https://github.com/openai/CLIP.git@d50d76daa670286dd6cacf3bcd80b5e4823fc8e1 \
-    git+https://github.com/mlfoundations/open_clip.git@v2.20.0
-
-# there seems to be a memory leak (or maybe just memory not being freed fast enough) that is fixed by this version of malloc
-# maybe move this up to the dependencies list.
-RUN apt-get -y install libgoogle-perftools-dev && apt-get clean
-ENV LD_PRELOAD=libtcmalloc.so
-
-COPY . /docker
-
-RUN \
-    # mv ${ROOT}/style.css ${ROOT}/user.css && \
-    # one of the ugliest hacks I ever wrote \
-    sed -i 's/in_app_dir = .*/in_app_dir = True/g' /usr/local/lib/python3.10/dist-packages/gradio/routes.py && \
-    git config --global --add safe.directory '*'
-
-WORKDIR ${ROOT}
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV CLI_ARGS=""
-EXPOSE 7860
-ENTRYPOINT ["/docker/entrypoint.sh"]
-CMD ["python3", "-u", "webui.py", "--listen", "--port", "7860"]
+ENTRYPOINT ["/usr/local/bin/comfyui-entrypoint"]
+CMD ["--base-directory", "/data"]

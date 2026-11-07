@@ -1,42 +1,49 @@
 # Stable Diffusion Containerized
 
-⚠️ **WORK IN PROGRESS** - This project is actively under development and currently optimized specifically for NVIDIA RTX 5000 series GPUs.
+A container image for [ComfyUI](https://github.com/comfyanonymous/ComfyUI) on
+NVIDIA GPUs.
 
-A Docker container for running Stable Diffusion with GPU acceleration using NVIDIA CUDA.
+Versions before v2.0.0 packaged AUTOMATIC1111's stable-diffusion-webui. v2.0.0
+replaced it with ComfyUI.
 
-## Features
+## What's in the image
 
-- NVIDIA CUDA runtime support with latest drivers
-- Pre-configured Python environment with PyTorch
-- Web UI interface on port 7860
-- Optimized for RTX 5xxx GPU architecture
-- Support for modern Stable Diffusion models
+- ComfyUI pinned to a release tag (`COMFYUI_VERSION` in the `Dockerfile`).
+- PyTorch from the CUDA 13.0 wheel index. The wheels bundle the CUDA runtime,
+  so the host only needs the NVIDIA driver (580 or newer). That covers RTX 50
+  series (Blackwell, sm_120).
+- Runs as uid/gid 1000. The application is read-only under `/opt/ComfyUI`.
+- No ComfyUI-Manager. Custom nodes are whatever you put in
+  `/data/custom_nodes`.
 
-## Requirements
+## Running
 
-- Docker with NVIDIA container runtime
-- **NVIDIA RTX 5000 series GPU** (primary target)
-- At least 12GB GPU memory recommended
-- Latest NVIDIA drivers (570+ series recommended)
+> **ComfyUI has no authentication.** Anyone who can reach port 8188 can run
+> workflows and read or write files under `/data`. Publish it on loopback only,
+> as below, or put it behind an authenticating reverse proxy.
 
-## Usage
+Everything ComfyUI writes goes under `/data`: `models`, `custom_nodes`,
+`input`, `output`, `temp` and `user`. `HOME` is `/tmp`, for library caches.
+Both paths need to be writable, and the root filesystem can be read-only.
 
-### Building the Image
-
-```bash
-docker build -t stable-diffusion .
+```sh
+docker run --rm --gpus all -p 127.0.0.1:8188:8188 \
+  --read-only --tmpfs /tmp \
+  -v comfyui-data:/data \
+  ghcr.io/alpineworks/stable-diffusion-containerized:v2.0.0
 ```
 
-### Running the Container
+The entrypoint is `python main.py --listen 0.0.0.0 --port 8188`, and the
+default arguments are `--base-directory /data`. Any arguments you pass replace
+those defaults, so include `--base-directory /data` yourself, for example:
 
-```bash
-docker run --gpus all -p 7860:7860 stable-diffusion
+```sh
+... ghcr.io/alpineworks/stable-diffusion-containerized:v2.0.0 \
+  --base-directory /data --offline --disable-smart-memory
 ```
 
-## Accessing the Web UI
+## Releases
 
-Once the container is running, access the web interface at `http://localhost:7860`
-
-## Model Requirements
-
-Currently, this automatically downloads all models
+Releases are cut by semantic-release from conventional commits on `main`, and
+each release builds and pushes `ghcr.io/alpineworks/stable-diffusion-containerized:<version>`.
+To move to a new ComfyUI version, bump `COMFYUI_VERSION` with a `feat:` commit.

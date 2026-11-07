@@ -1,5 +1,3 @@
 *
-!clone.sh
-!config.py
-!entrypoint.sh
 !Dockerfile
+!entrypoint.sh

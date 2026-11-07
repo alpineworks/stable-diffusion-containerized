@@ -1,0 +1,5 @@
+---
+ignored:
+  # pip versions: torch is pinned by ARG. ComfyUI's own requirements are
+  # mostly unpinned, so the rest resolves at build time (no lock file yet).
+  - DL3013

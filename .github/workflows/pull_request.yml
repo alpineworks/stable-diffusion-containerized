@@ -1,15 +1,20 @@
 ---
 on: [pull_request] # yamllint disable-line rule:truthy
 name: main
+
+permissions:
+  contents: read
+
 jobs:
   commitlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
       - run: npm install --save-dev @commitlint/{config-conventional,cli}
@@ -18,9 +23,9 @@ jobs:
   yamllint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: yaml-lint
         uses: ibiqlik/action-yamllint@v3
@@ -28,10 +33,40 @@ jobs:
   hadolint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - uses: hadolint/hadolint-action@v2.0.0
+      - uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile
+
+  # Build the image (no push) and boot ComfyUI on CPU with --quick-test-for-ci,
+  # which initialises everything, loads the built-in nodes, and exits.
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v2.0.0
+        with:
+          tool-cache: false
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: comfyui-test:ci
+
+      - name: Boot ComfyUI on CPU
+        run: >-
+          docker run --rm --read-only --tmpfs /tmp
+          --tmpfs /data:uid=1000,gid=1000 comfyui-test:ci
+          --base-directory /data --cpu --quick-test-for-ci
