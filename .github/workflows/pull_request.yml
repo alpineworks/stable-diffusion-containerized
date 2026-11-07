@@ -70,3 +70,11 @@ jobs:
           docker run --rm --read-only --tmpfs /tmp
           --tmpfs /data:uid=1000,gid=1000 comfyui-test:ci
           --base-directory /data --cpu --quick-test-for-ci
+
+      # Triton needs a C compiler on first GPU use; the CPU boot test above
+      # cannot exercise that path, so check for it directly.
+      - name: Check C compiler for Triton
+        run: >-
+          docker run --rm --entrypoint python comfyui-test:ci -c
+          "from triton.runtime.build import _find_compiler;
+          print(_find_compiler('c'))"

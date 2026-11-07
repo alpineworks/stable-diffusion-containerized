@@ -3,3 +3,5 @@ ignored:
   # pip versions: torch is pinned by ARG. ComfyUI's own requirements are
   # mostly unpinned, so the rest resolves at build time (no lock file yet).
   - DL3013
+  # apt versions: gcc/libc6-dev come from the pinned base image's release.
+  - DL3008
